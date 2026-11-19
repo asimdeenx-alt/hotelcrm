@@ -1,0 +1,557 @@
+// Premium Hotel CRM — multi-hotel (SaaS) Prisma schema for MySQL 8.
+// Uses the JavaScript client generator (prisma-client-js) — no TypeScript output.
+//
+// Tenancy: every hotel-owned table carries `hotelId`. Application code never filters
+// by hotelId by hand — `forHotel(hotelId)` in src/lib/tenant.js injects it into every query.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN // platform owner — manages hotels, belongs to no hotel
+  ADMIN
+  MANAGER
+  RECEPTIONIST
+  HOUSEKEEPING
+  ACCOUNTANT
+}
+
+enum HotelStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+}
+
+enum RoomStatus {
+  AVAILABLE
+  OCCUPIED
+  CLEANING
+  INSPECTION // cleaned, waiting for supervisor inspection
+  MAINTENANCE
+  OUT_OF_ORDER
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+  NO_SHOW
+}
+
+enum BookingSource {
+  WALK_IN
+  PHONE
+  EMAIL
+  WEBSITE
+  OTA
+  CORPORATE
+}
+
+enum ChargeCategory {
+  ROOM
+  FOOD_BEVERAGE
+  SPA
+  LAUNDRY
+  MINIBAR
+  TRANSPORT
+  OTHER
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  ONLINE
+}
+
+enum GuestTier {
+  REGULAR
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum InspectionResult {
+  PASSED
+  FAILED
+}
+
+enum AgentTxnType {
+  INVOICE // agent owes the hotel (bookings billed to the agent)
+  PAYMENT // agent paid the hotel
+  COMMISSION // commission credited to the agent (reduces what they owe)
+  ADJUSTMENT // manual correction (+ owes more, - owes less)
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  LEAVE // paid leave
+  HOLIDAY
+}
+
+enum EntryType {
+  INCOME
+  EXPENSE
+}
+
+model Hotel {
+  id                 Int         @id @default(autoincrement())
+  name               String      @db.VarChar(120)
+  email              String?     @db.VarChar(191)
+  phone              String?     @db.VarChar(40)
+  status             HotelStatus @default(TRIAL)
+  plan               String      @default("Trial") @db.VarChar(40)
+  subscriptionEndsAt DateTime? // null = no expiry
+  notes              String?     @db.Text // internal notes for the platform owner
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  users        User[]
+  roomTypes    RoomType[]
+  rooms        Room[]
+  guests       Guest[]
+  reservations Reservation[]
+  tasks        HousekeepingTask[]
+  settings     Setting[]
+  inspections  RoomInspection[]
+  agents       TravelAgent[]
+  agentTxns    AgentTransaction[]
+  suppliers    Supplier[]
+  bills        PurchaseBill[]
+  supplierPays SupplierPayment[]
+  employees    Employee[]
+  attendance   Attendance[]
+  salaries     SalaryPayment[]
+  entries      AccountEntry[]
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  hotelId      Int? // null only for SUPER_ADMIN
+  name         String   @db.VarChar(120)
+  email        String   @unique @db.VarChar(191)
+  passwordHash String   @db.VarChar(191)
+  role         Role     @default(RECEPTIONIST)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  hotel        Hotel?             @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  reservations Reservation[]      @relation("ReservationCreatedBy")
+  tasks        HousekeepingTask[]
+  payments     Payment[]
+  inspections  RoomInspection[]
+  entries      AccountEntry[]
+
+  @@index([hotelId])
+}
+
+model RoomType {
+  id          Int      @id @default(autoincrement())
+  hotelId     Int
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+  baseRate    Decimal  @db.Decimal(10, 2)
+  capacity    Int      @default(2)
+  amenities   String?  @db.Text // comma-separated list
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hotel Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  rooms Room[]
+
+  @@unique([hotelId, name])
+}
+
+model Room {
+  id         Int        @id @default(autoincrement())
+  hotelId    Int
+  number     String     @db.VarChar(20)
+  floor      Int        @default(1)
+  status     RoomStatus @default(AVAILABLE)
+  notes      String?    @db.Text
+  roomTypeId Int
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  hotel        Hotel              @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  roomType     RoomType           @relation(fields: [roomTypeId], references: [id])
+  reservations Reservation[]
+  tasks        HousekeepingTask[]
+  inspections  RoomInspection[]
+
+  @@unique([hotelId, number])
+  @@index([roomTypeId])
+}
+
+model Guest {
+  id            Int       @id @default(autoincrement())
+  hotelId       Int
+  firstName     String    @db.VarChar(80)
+  lastName      String    @db.VarChar(80)
+  email         String?   @db.VarChar(191)
+  phone         String?   @db.VarChar(40)
+  nationality   String?   @db.VarChar(80)
+  idType        String?   @db.VarChar(40)
+  idNumber      String?   @db.VarChar(80)
+  address       String?   @db.Text
+  dateOfBirth   DateTime? @db.Date
+  company       String?   @db.VarChar(120)
+  tier          GuestTier @default(REGULAR)
+  vip           Boolean   @default(false)
+  loyaltyPoints Int       @default(0)
+  preferences   String?   @db.Text
+  notes         String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  hotel        Hotel         @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+
+  @@unique([hotelId, email])
+  @@index([hotelId, lastName, firstName])
+}
+
+model Reservation {
+  id             Int               @id @default(autoincrement())
+  hotelId        Int
+  code           String            @unique @db.VarChar(20)
+  guestId        Int
+  roomId         Int
+  checkIn        DateTime          @db.Date
+  checkOut       DateTime          @db.Date
+  adults         Int               @default(1)
+  children       Int               @default(0)
+  status         ReservationStatus @default(CONFIRMED)
+  source         BookingSource     @default(WALK_IN)
+  rate           Decimal           @db.Decimal(10, 2) // nightly rate
+  discount       Decimal           @default(0) @db.Decimal(10, 2) // flat discount on the stay
+  specialRequest String?           @db.Text
+  actualCheckIn  DateTime?
+  actualCheckOut DateTime?
+  createdById    Int?
+  agentId        Int? // booked through a travel agent / OTA
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  hotel     Hotel     @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  agent     TravelAgent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  guest     Guest     @relation(fields: [guestId], references: [id])
+  room      Room      @relation(fields: [roomId], references: [id])
+  createdBy User?     @relation("ReservationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  charges   Charge[]
+  payments  Payment[]
+
+  @@index([hotelId, status])
+  @@index([agentId])
+  @@index([roomId, checkIn, checkOut])
+  @@index([guestId])
+}
+
+// Charges and payments belong to a hotel through their reservation.
+model Charge {
+  id            Int            @id @default(autoincrement())
+  reservationId Int
+  category      ChargeCategory @default(OTHER)
+  description   String         @db.VarChar(191)
+  unitPrice     Decimal        @db.Decimal(10, 2)
+  quantity      Int            @default(1)
+  createdAt     DateTime       @default(now())
+
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  @@index([reservationId])
+}
+
+model Payment {
+  id            Int           @id @default(autoincrement())
+  reservationId Int
+  amount        Decimal       @db.Decimal(10, 2)
+  method        PaymentMethod @default(CASH)
+  reference     String?       @db.VarChar(120)
+  receivedById  Int?
+  createdAt     DateTime      @default(now())
+
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  receivedBy  User?       @relation(fields: [receivedById], references: [id], onDelete: SetNull)
+
+  @@index([reservationId])
+  @@index([createdAt])
+}
+
+model HousekeepingTask {
+  id           Int          @id @default(autoincrement())
+  hotelId      Int
+  roomId       Int
+  assignedToId Int?
+  title        String       @db.VarChar(191)
+  status       TaskStatus   @default(PENDING)
+  priority     TaskPriority @default(NORMAL)
+  notes        String?      @db.Text
+  dueDate      DateTime?    @db.Date
+  completedAt  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  hotel      Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  room       Room  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  assignedTo User? @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([hotelId, status])
+  @@index([roomId])
+}
+
+model Setting {
+  hotelId Int
+  key     String @db.VarChar(64)
+  value   String @db.Text
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@id([hotelId, key])
+}
+
+// ─── Housekeeping inspection ─────────────────────────────────────────────
+
+model RoomInspection {
+  id            Int              @id @default(autoincrement())
+  hotelId       Int
+  roomId        Int
+  inspectedById Int?
+  result        InspectionResult
+  notes         String?          @db.Text
+  createdAt     DateTime         @default(now())
+
+  hotel       Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  room        Room  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  inspectedBy User? @relation(fields: [inspectedById], references: [id], onDelete: SetNull)
+
+  @@index([hotelId, createdAt])
+}
+
+// ─── Travel agents / OTAs ────────────────────────────────────────────────
+
+model TravelAgent {
+  id             Int      @id @default(autoincrement())
+  hotelId        Int
+  name           String   @db.VarChar(120)
+  contactPerson  String?  @db.VarChar(120)
+  phone          String?  @db.VarChar(40)
+  email          String?  @db.VarChar(191)
+  commissionPct  Decimal  @default(0) @db.Decimal(5, 2)
+  openingBalance Decimal  @default(0) @db.Decimal(12, 2) // + agent owes hotel
+  notes          String?  @db.Text
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  hotel        Hotel              @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+  transactions AgentTransaction[]
+
+  @@unique([hotelId, name])
+}
+
+model AgentTransaction {
+  id            Int          @id @default(autoincrement())
+  hotelId       Int
+  agentId       Int
+  type          AgentTxnType
+  amount        Decimal      @db.Decimal(12, 2)
+  date          DateTime     @db.Date
+  reference     String?      @db.VarChar(120)
+  notes         String?      @db.Text
+  reservationId Int?
+  createdAt     DateTime     @default(now())
+
+  hotel Hotel       @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  agent TravelAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId, date])
+  @@index([agentId])
+}
+
+// ─── Store purchases ─────────────────────────────────────────────────────
+
+model Supplier {
+  id        Int      @id @default(autoincrement())
+  hotelId   Int
+  name      String   @db.VarChar(120)
+  phone     String?  @db.VarChar(40)
+  email     String?  @db.VarChar(191)
+  gstin     String?  @db.VarChar(30)
+  address   String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  hotel    Hotel             @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  bills    PurchaseBill[]
+  payments SupplierPayment[]
+
+  @@unique([hotelId, name])
+}
+
+model PurchaseBill {
+  id         Int      @id @default(autoincrement())
+  hotelId    Int
+  supplierId Int
+  billNo     String   @db.VarChar(60)
+  billDate   DateTime @db.Date
+  category   String   @default("Kitchen") @db.VarChar(60)
+  taxAmount  Decimal  @default(0) @db.Decimal(12, 2)
+  total      Decimal  @db.Decimal(12, 2) // items + tax, stored for fast reporting
+  notes      String?  @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  hotel    Hotel             @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  supplier Supplier          @relation(fields: [supplierId], references: [id])
+  items    PurchaseItem[]
+  payments SupplierPayment[]
+
+  @@index([hotelId, billDate])
+  @@index([supplierId])
+}
+
+// Line items belong to a hotel through their bill (only created nested in the bill).
+model PurchaseItem {
+  id          Int     @id @default(autoincrement())
+  billId      Int
+  description String  @db.VarChar(191)
+  quantity    Decimal @db.Decimal(12, 3)
+  unit        String? @db.VarChar(20)
+  rate        Decimal @db.Decimal(12, 2)
+
+  bill PurchaseBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  @@index([billId])
+}
+
+model SupplierPayment {
+  id         Int           @id @default(autoincrement())
+  hotelId    Int
+  supplierId Int
+  billId     Int?
+  amount     Decimal       @db.Decimal(12, 2)
+  method     PaymentMethod @default(CASH)
+  date       DateTime      @db.Date
+  reference  String?       @db.VarChar(120)
+  createdAt  DateTime      @default(now())
+
+  hotel    Hotel         @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  supplier Supplier      @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  bill     PurchaseBill? @relation(fields: [billId], references: [id], onDelete: SetNull)
+
+  @@index([hotelId, date])
+}
+
+// ─── Staff HR: employees, attendance, salary ────────────────────────────
+
+model Employee {
+  id            Int       @id @default(autoincrement())
+  hotelId       Int
+  name          String    @db.VarChar(120)
+  designation   String?   @db.VarChar(80)
+  department    String    @default("Front Office") @db.VarChar(60)
+  phone         String?   @db.VarChar(40)
+  email         String?   @db.VarChar(191)
+  address       String?   @db.Text
+  idNumber      String?   @db.VarChar(60) // Aadhaar / PAN / other ID
+  bankAccount   String?   @db.VarChar(80)
+  joinDate      DateTime? @db.Date
+  monthlySalary Decimal   @default(0) @db.Decimal(12, 2)
+  active        Boolean   @default(true)
+  notes         String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  hotel      Hotel           @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  attendance Attendance[]
+  salaries   SalaryPayment[]
+
+  @@index([hotelId, active])
+}
+
+model Attendance {
+  id         Int              @id @default(autoincrement())
+  hotelId    Int
+  employeeId Int
+  date       DateTime         @db.Date
+  status     AttendanceStatus
+  notes      String?          @db.VarChar(191)
+
+  hotel    Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@index([hotelId, date])
+}
+
+model SalaryPayment {
+  id          Int           @id @default(autoincrement())
+  hotelId     Int
+  employeeId  Int
+  month       String        @db.VarChar(7) // "2026-11"
+  baseSalary  Decimal       @db.Decimal(12, 2)
+  payableDays Decimal       @db.Decimal(5, 1)
+  daysInMonth Int
+  deductions  Decimal       @default(0) @db.Decimal(12, 2)
+  bonus       Decimal       @default(0) @db.Decimal(12, 2)
+  netPay      Decimal       @db.Decimal(12, 2)
+  method      PaymentMethod @default(BANK_TRANSFER)
+  paidOn      DateTime      @db.Date
+  notes       String?       @db.VarChar(191)
+  createdAt   DateTime      @default(now())
+
+  hotel    Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, month])
+  @@index([hotelId, paidOn])
+}
+
+// ─── Accounts: other income and expenses ────────────────────────────────
+// Guest payments, agent payments, supplier payments and salaries come from their own
+// tables; this holds everything else (electricity, rent, misc. income).
+
+model AccountEntry {
+  id          Int           @id @default(autoincrement())
+  hotelId     Int
+  type        EntryType
+  date        DateTime      @db.Date
+  category    String        @db.VarChar(60)
+  description String        @db.VarChar(191)
+  amount      Decimal       @db.Decimal(12, 2)
+  method      PaymentMethod @default(CASH)
+  reference   String?       @db.VarChar(120)
+  createdById Int?
+  createdAt   DateTime      @default(now())
+
+  hotel     Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([hotelId, date])
+}

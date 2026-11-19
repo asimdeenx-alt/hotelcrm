@@ -1,0 +1,145 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Dark mode is opt-in via a `.dark` class on <html>; the default theme is light. */
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-2: var(--sidebar-2);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-brand: var(--brand);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-light: var(--brand-light);
+  --color-brand-tint: var(--brand-tint);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+}
+
+/* Headings: same family as body, heavier and tighter. */
+@utility font-display {
+  font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+:root {
+  --radius: 0.75rem;
+
+  /* Brand: navy blue #244B82 (used for primary UI and the sidebar) */
+  --brand: #244b82;
+  --brand-dark: #1b3a66;
+  --brand-light: #3b6bb0;
+  --brand-tint: #eaf0f8;
+
+  --background: #f5f7fb;
+  --foreground: #0f1b2d;
+  --card: #ffffff;
+  --card-foreground: #0f1b2d;
+  --popover: #ffffff;
+  --popover-foreground: #0f1b2d;
+  --primary: var(--brand);
+  --primary-foreground: #ffffff;
+  --secondary: var(--brand-tint);
+  --secondary-foreground: var(--brand);
+  --muted: #f1f4f9;
+  --muted-foreground: #64748b;
+  --accent: var(--brand-tint);
+  --accent-foreground: var(--brand);
+  --destructive: #dc2626;
+  --border: #e3e8f0;
+  --input: #d8dfea;
+  --ring: var(--brand-light);
+  --chart-1: var(--brand-light);
+
+  /* Sidebar in the brand colour */
+  --sidebar: var(--brand);
+  --sidebar-2: var(--brand-dark);
+  --sidebar-foreground: #d6e0ee;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: var(--brand);
+  --sidebar-accent: rgb(255 255 255 / 0.1);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgb(255 255 255 / 0.12);
+}
+
+.dark {
+  --background: oklch(0.17 0.02 270);
+  --foreground: oklch(0.96 0.01 270);
+  --card: oklch(0.21 0.025 270);
+  --card-foreground: oklch(0.96 0.01 270);
+  --popover: oklch(0.23 0.025 270);
+  --popover-foreground: oklch(0.96 0.01 270);
+  --primary: oklch(0.673 0.182 276.9);
+  --primary-foreground: oklch(0.17 0.02 270);
+  --secondary: oklch(0.27 0.04 275);
+  --secondary-foreground: oklch(0.96 0.01 270);
+  --muted: oklch(0.26 0.02 270);
+  --muted-foreground: oklch(0.72 0.03 270);
+  --accent: oklch(0.28 0.05 277);
+  --accent-foreground: oklch(0.96 0.01 270);
+  --destructive: oklch(0.66 0.2 20);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.673 0.182 276.9);
+  --chart-1: oklch(0.673 0.182 276.9);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    color-scheme: light;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+/* Slim scrollbar that only shows on hover (sidebar nav). */
+.scroll-slim {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.scroll-slim:hover {
+  scrollbar-color: rgb(255 255 255 / 0.3) transparent;
+}
+
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+}
